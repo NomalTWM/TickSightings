@@ -183,17 +183,42 @@ The current feed is clean, but the importer validates and de-duplicates anyway, 
 - **Bad requests:** invalid filter values (for example a malformed date) and an invalid `interval` return `400` with a descriptive message.
 
 ## Testing
-
+ 
 ```bash
-python manage.py test
+python manage.py test tickSightings
 ```
+ 
+Add `-v 2` to see each test by name. The suite has 33 tests in `tickSightings/tests.py`. It runs against a temporary test database and never calls the real upstream API: the importer tests replace the network fetch with fake feeds, so the tests are fast, deterministic and work offline.
+ 
+**Importer**
+ 
+- Records are created, and running the import twice leaves one row per ID (idempotency).
+- Re-importing a record whose upstream values changed refreshes the stored row.
+- Whitespace is trimmed, city names are title-cased, and timestamps without a timezone are stored as UTC.
+- Records with a missing field, a blank field, an unparseable date or a null ID are rejected, while valid records in the same feed still import.
+- Duplicate IDs within one feed collapse to a single row (the last one wins).
+- An empty feed is handled without error.
+- An upstream connection failure or HTTP error status raises a clear `CommandError`, and existing data in the database is left untouched.
 
-<!-- TODO: replace this section with what your tests actually cover, e.g.
-- importer is idempotent (running twice leaves one row per ID)
-- invalid and duplicate records are rejected or de-duplicated
-- upstream failure is handled and existing data is preserved
-- list filters, report counts, and 400 on an invalid interval
--->
+**Sightings endpoint**
+ 
+- Default ordering (newest first) and pagination.
+- Filters: city and species (case-insensitive), inclusive date ranges, and combinations of filters.
+- Free-text search across city, species and Latin name, and reversing the sort order.
+- A malformed date returns `400`, an unknown ID returns `404`, and write methods return `405`.
+  
+**Reports**
+ 
+- Counts per city, per region and over time, checked against a small fixture with known totals.
+- Weekly trends group by ISO week (starting Monday), monthly trends group by calendar month, and the interval defaults to monthly.
+- Filters apply to every report, and an empty result returns an empty list.
+- Cities missing from the region mapping appear under `"Unknown"`.
+- An invalid `interval` returns `400`, and so does a malformed filter value on every report endpoint.
+  
+**Not covered**
+ 
+The tests do not exercise the live upstream API, the Swagger/OpenAPI output, or behaviour under real network conditions such as slow responses. The retry-with-backoff configuration on the HTTP session is therefore not tested directly. The tests only verify how the importer reacts once a failure is raised.
+ 
 
 ## Limitations and future work
 
