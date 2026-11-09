@@ -3,6 +3,7 @@ from django.db.models.functions import TruncMonth, TruncWeek
 from rest_framework import viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from .filters import SightingFilter
@@ -20,8 +21,11 @@ class SightingViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 def filtered(request):
-    """Reports honour the same filters as the list endpoint."""
-    return SightingFilter(request.GET, queryset=Sighting.objects.all()).qs
+    """Reports honour the same filters as the list endpoint, including validation."""
+    f = SightingFilter(request.GET, queryset=Sighting.objects.all())
+    if not f.is_valid():
+        raise ValidationError(f.errors)
+    return f.qs
 
 
 @api_view(["GET"])
